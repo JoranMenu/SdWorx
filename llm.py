@@ -19,6 +19,10 @@ def client():
     if _client is None:
         if os.getenv("GEMINI_API_KEY"):
             _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        elif os.getenv("GOOGLE_ACCESS_TOKEN"):
+            from google.oauth2.credentials import Credentials
+            _client = genai.Client(vertexai=True, project=PROJECT, location=LOCATION,
+                                   credentials=Credentials(os.environ["GOOGLE_ACCESS_TOKEN"]))
         else:
             _client = genai.Client(vertexai=True, project=PROJECT, location=LOCATION)
     return _client
