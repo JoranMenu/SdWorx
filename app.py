@@ -156,9 +156,12 @@ def handle_answer(text=None, audio=None):
 
 
 def transcript_md():
+    answered = {m["topic_id"] for m in s.messages if m["role"] == "user"}
     lines, last = [], "none"
     for m in s.messages:
-        if m["topic_id"] != last and m["topic_id"]:
+        if m["topic_id"] not in answered:
+            continue
+        if m["topic_id"] != last:
             t = topic(m["topic_id"])
             lines.append(f"\n## {t['title']}\n")
             last = m["topic_id"]
@@ -302,20 +305,26 @@ elif s.stage == "Interview":
 elif s.stage == "Generate":
     st.header("3 · Knowledge base documents")
     transcript = transcript_md()
+    if not transcript.strip():
+        st.warning("No questions were answered, so there is nothing to turn into documents.")
+        st.stop()
     if not s.outputs:
         ctx = dict(
-            name=s.profile["name"], role=s.profile["role"], glossary=glossary, docs=docs_block(s.docs),
+            name=s.profile["name"], role=s.profile["role"], glossary=glossary,
             terms="\n".join(f"- {t.get('term')}: {t.get('meaning')}" for t in s.terms) or "(none)",
         )
         bar = st.progress(0.0)
         for i, (kind, (title, _)) in enumerate(prompts.DOC_TYPES.items()):
             bar.progress(i / len(prompts.DOC_TYPES), f"Writing: {title}...")
             doc = safe(title, llm.generate_doc, kind, transcript, ctx)
-            if doc:
-                s.outputs[kind] = doc.removeprefix("```markdown").removeprefix("```").removesuffix("```").strip()
+            doc = (doc or "").removeprefix("```markdown").removeprefix("```").removesuffix("```").strip()
+            if doc and doc.upper() != "NONE":
+                s.outputs[kind] = doc
         bar.empty()
         slug = re.sub(r"\W+", "_", s.profile["name"].lower()).strip("_")
         OUT.mkdir(exist_ok=True)
+        for old in OUT.glob(f"{slug}_*.md"):
+            old.unlink()
         for kind, text in s.outputs.items():
             (OUT / f"{slug}_{kind}.md").write_text(text, encoding="utf-8")
         (OUT / f"{slug}_transcript.md").write_text(f"# Exit interview - {s.profile['name']}\n{transcript}", encoding="utf-8")

@@ -108,8 +108,8 @@ DOC_TYPES = {
     ),
     "glossary": (
         "Glossary additions",
-        "Markdown table (Term | Meaning | Where it is used). Only terms NOT in the existing glossary. "
-        "Unknown terms that were never explained get meaning 'TO CONFIRM'.",
+        "Markdown table (Term | Meaning | Where it is used). Only terms the leaver explained in the "
+        "transcript and that are NOT in the existing glossary.",
     ),
     "howto": (
         "How-to guides",
@@ -144,16 +144,18 @@ EXISTING GLOSSARY:
 TERMS EXPLAINED DURING THE INTERVIEW:
 {terms}
 
-LEAVER'S EXISTING KB DOCUMENTS:
-{docs}
-
-INTERVIEW TRANSCRIPT:
+INTERVIEW TRANSCRIPT (only the topics the leaver actually answered):
 {transcript}
 
-Rules: only use information from the transcript and documents, never invent facts. Where
-information is missing write "TO CONFIRM with team lead". Clear English markdown, no code fences
-(the source documents may be in Dutch: translate, but keep file names, tabs and codes as they are).
-Where the leaver said which version of a document or value is correct, state it explicitly.
+Rules:
+- Use ONLY what the leaver said in the transcript. Never add content from elsewhere, never invent facts,
+  and do not add sections, rows or placeholders for things that were not discussed.
+- Keep it proportional: a short transcript gives a short document. Omit any section of the
+  instructions that the transcript gives nothing for.
+- Only mark "TO CONFIRM with team lead" for a gap inside something the leaver did talk about.
+- If the transcript contains nothing useful for this document type, reply with exactly: NONE
+- Clear English markdown, no code fences. Keep file names, tabs and codes exactly as they are.
+- Where the leaver said which version of a document or value is correct, state it explicitly.
 Start with exactly this front matter:
 ---
 title: {doc_title} - {name}

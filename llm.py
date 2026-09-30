@@ -137,7 +137,6 @@ def generate_doc(kind, transcript, context):
             doc_instructions=instructions,
             glossary=context["glossary"],
             terms=context["terms"],
-            docs=context["docs"],
             transcript=transcript,
             date=datetime.date.today().isoformat(),
             kind=kind,
