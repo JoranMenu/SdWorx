@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .env
 output/
+.agent_sandbox/
 .streamlit/secrets.toml

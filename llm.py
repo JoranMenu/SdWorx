@@ -1,47 +1,71 @@
 import datetime
 import json
 import os
+import pathlib
 
-from google import genai
-from google.genai import types
+import queue
+import sys
+import threading
+
+from cursor_sdk import Agent, AgentOptions, LocalAgentOptions
+from cursor_sdk import _bridge
 
 import prompts
 
-PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "qwiklabs-gcp-04-6de79205cf17")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "europe-west1")
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-_client = None
+def _read_discovery_threaded(process, timeout):
+    # cursor_sdk polls the bridge's stderr pipe with select(), which only accepts sockets on Windows.
+    lines = queue.Queue()
+
+    def pump():
+        for line in process.stderr:
+            lines.put(line)
+        lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    seen = []
+    try:
+        while True:
+            line = lines.get(timeout=timeout)
+            if line is None:
+                raise _bridge.CursorSDKError(f"Bridge exited before discovery: {''.join(seen)}")
+            seen.append(line)
+            discovery = _bridge.parse_discovery_line(line)
+            if discovery is not None:
+                return discovery
+    except queue.Empty:
+        raise _bridge.CursorSDKError("Timed out waiting for bridge discovery")
 
 
-def client():
-    global _client
-    if _client is None:
-        if os.getenv("GEMINI_API_KEY"):
-            _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-        elif os.getenv("GOOGLE_ACCESS_TOKEN"):
-            from google.oauth2.credentials import Credentials
-            _client = genai.Client(vertexai=True, project=PROJECT, location=LOCATION,
-                                   credentials=Credentials(os.environ["GOOGLE_ACCESS_TOKEN"]))
-        else:
-            _client = genai.Client(vertexai=True, project=PROJECT, location=LOCATION)
-    return _client
+if sys.platform == "win32":
+    _bridge._read_discovery = _read_discovery_threaded
+
+MODEL = os.getenv("CURSOR_MODEL", "composer-2.5")
+# The agent can use tools, so it runs in an empty folder where it has nothing to touch.
+SANDBOX = pathlib.Path(__file__).parent / ".agent_sandbox"
+
+NO_TOOLS = (
+    "You are used as a plain text-completion API. Do NOT use any tools, do NOT read, search or write files, "
+    "do NOT run commands. Reply immediately with only the requested output, no preamble."
+)
 
 
 def _call(prompt, audio_bytes=None, json_mode=False, temperature=0.4):
-    parts = [types.Part.from_text(text=prompt)]
-    if audio_bytes:
-        parts.append(types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav"))
-    resp = client().models.generate_content(
-        model=MODEL,
-        contents=[types.Content(role="user", parts=parts)],
-        config=types.GenerateContentConfig(
-            system_instruction=prompts.SYSTEM,
-            temperature=temperature,
-            response_mime_type="application/json" if json_mode else None,
+    SANDBOX.mkdir(exist_ok=True)
+    full = f"{NO_TOOLS}\n\n{prompts.SYSTEM}\n\n{prompt}"
+    if json_mode:
+        full += "\n\nOutput raw JSON only, no markdown fences."
+    result = Agent.prompt(
+        full,
+        AgentOptions(
+            api_key=os.environ["CURSOR_API_KEY"],
+            model=MODEL,
+            local=LocalAgentOptions(cwd=str(SANDBOX)),
         ),
     )
-    return (resp.text or "").strip()
+    if result.status != "finished":
+        raise RuntimeError(f"Cursor run {result.id} ended with status {result.status}")
+    return (result.result or "").strip()
 
 
 def generate_text(prompt, temperature=0.4):
@@ -52,9 +76,7 @@ def generate_json(prompt, schema="", audio_bytes=None, temperature=0.4):
     if schema:
         prompt = f"{prompt}\n\nReturn ONLY JSON with this shape:\n{schema}"
     text = _call(prompt, audio_bytes, json_mode=True, temperature=temperature)
-    if text.startswith("```"):
-        text = text.strip("`").removeprefix("json").strip()
-    return json.loads(text)
+    return json.loads(text[text.index("{"): text.rindex("}") + 1])
 
 
 def build_plan(profile, docs, unknown_terms, vague_refs):

@@ -4,6 +4,7 @@ import re
 import zipfile
 
 import streamlit as st
+from streamlit_mic_recorder import speech_to_text
 
 import llm
 import prompts
@@ -172,7 +173,8 @@ with st.sidebar:
             icon = "⏭️" if t.get("skipped") else "✅" if t["covered"] else "▶️" if t["id"] == s.current_id and s.stage == "Interview" else "⬜"
             st.markdown(f"{icon} {t['title']}" + (" *(new)*" if t.get("added") else ""))
     st.divider()
-    llm.MODEL = st.text_input("Gemini model", llm.MODEL)
+    llm.MODEL = st.text_input("Cursor model", llm.MODEL)
+    speech_lang = st.selectbox("Speech language", ["en-US", "nl-BE", "fr-BE"])
     demo = st.toggle("Demo mode (simulate answers)", value=False)
     if st.button("Reset"):
         s.clear()
@@ -205,7 +207,7 @@ if s.stage == "Prepare":
         st.markdown("\n".join(f"- *\"{v}\"* ({', '.join(sorted(f))})" for v, f in vague.items()) or "_none_")
 
     if st.button("Build interview plan", type="primary"):
-        with st.spinner("Gemini is analysing the documents and preparing questions..."):
+        with st.spinner("Analysing the documents and preparing questions..."):
             plan = safe("Building the plan", llm.build_plan, p, docs_block(docs), sorted(unknown), list(vague))
         if plan:
             s.update(plan=plan, docs=docs, gaps=(unknown, vague))
@@ -240,8 +242,9 @@ elif s.stage == "Interview":
             st.markdown(m["text"])
 
     if not s.done:
-        audio = st.audio_input("🎙️ Answer by voice", key=f"audio_{s.turn}")
-        text = st.chat_input("...or type your answer")
+        spoken = speech_to_text(language=speech_lang, start_prompt="🎙️ Answer by voice",
+                                stop_prompt="⏹️ Stop and send", just_once=True, key=f"stt_{s.turn}")
+        text = st.chat_input("...or type your answer") or spoken
         c1, c2, c3 = st.columns(3)
         simulate = c1.button("🎭 Simulate answer", disabled=not demo)
         if c2.button("⏭️ Skip topic"):
@@ -253,11 +256,7 @@ elif s.stage == "Interview":
             s.done = True
             st.rerun()
 
-        if audio is not None:
-            with st.spinner("Listening..."):
-                handle_answer(audio=audio.getvalue())
-            st.rerun()
-        elif text:
+        if text:
             with st.spinner("Thinking..."):
                 handle_answer(text=text)
             st.rerun()
