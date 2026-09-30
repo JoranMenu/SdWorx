@@ -55,17 +55,18 @@ def _call(prompt, audio_bytes=None, json_mode=False, temperature=0.4):
     full = f"{NO_TOOLS}\n\n{prompts.SYSTEM}\n\n{prompt}"
     if json_mode:
         full += "\n\nOutput raw JSON only, no markdown fences."
-    result = Agent.prompt(
-        full,
-        AgentOptions(
-            api_key=os.environ["CURSOR_API_KEY"],
-            model=MODEL,
-            local=LocalAgentOptions(cwd=str(SANDBOX)),
-        ),
-    )
-    if result.status != "finished":
-        raise RuntimeError(f"Cursor run {result.id} ended with status {result.status}")
-    return (result.result or "").strip()
+    errors = []
+    for _ in range(2):
+        with Agent.create(model=MODEL, api_key=os.environ["CURSOR_API_KEY"],
+                          local=LocalAgentOptions(cwd=str(SANDBOX))) as agent:
+            run = agent.send(full)
+            notes = [f"{m.type}: {getattr(m, 'message', '') or getattr(m, 'status', '')}"
+                     for m in run.messages() if m.type not in ("assistant", "usage")]
+            result = run.wait()
+        if result.status == "finished" and result.result:
+            return result.result.strip()
+        errors.append(f"{result.status} ({'; '.join(notes)[-300:]})")
+    raise RuntimeError("Cursor run failed: " + " | ".join(errors))
 
 
 def generate_text(prompt, temperature=0.4):
@@ -124,18 +125,6 @@ def interview_turn(history, plan, current_id, answer_text=None, audio_bytes=None
         force=prompts.FORCE_CLOSE if force_close else "",
     )
     return generate_json(prompt, prompts.TURN_SCHEMA, audio_bytes=audio_bytes)
-
-
-def simulate_answer(question, history, profile, docs):
-    hist_txt = "\n".join(
-        f"{'Interviewer' if m['role'] == 'assistant' else 'Leaver'}: {m['text']}" for m in history[-8:]
-    )
-    return generate_text(
-        prompts.SIMULATE_PROMPT.format(
-            name=profile["name"], role=profile["role"], docs=docs, history=hist_txt, question=question
-        ),
-        temperature=0.9,
-    )
 
 
 def generate_doc(kind, transcript, context):

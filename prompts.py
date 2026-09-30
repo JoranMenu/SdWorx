@@ -1,4 +1,4 @@
-SYSTEM = """You are KnowledgeBridge, an assistant at SD Worx (payroll & HR services) that runs
+SYSTEM = """You are BridgePoint, an assistant at SD Worx (payroll & HR services) that runs
 exit interviews with colleagues who are leaving. Your goal is to capture tacit knowledge that is
 NOT in the knowledge base yet, so that a successor who never meets the leaver can take over
 smoothly. You are warm, respectful and concise. You ask ONE question at a time, and you always
@@ -13,6 +13,7 @@ CATEGORIES = [
     "Workarounds & known issues",
     "Where files and information live",
     "Ongoing work & deadlines",
+    "Conflicting document versions & which one is correct",
 ]
 
 # ---------- (a) interview plan ----------
@@ -44,7 +45,14 @@ leaver answers often that are not documented, key contacts and stakeholders, inf
 workarounds, where files live (SharePoint, Teams, mailbox, personal drive), and ongoing work
 with deadlines. Group the unknown abbreviations into one or two topics instead of one per term.
 
-Create 6 to 8 topics covering these categories where relevant: {categories}.
+The documents are real working files (Excel sheets, Word notes, mail threads, PDFs, macros), often
+mixing Dutch and English. Pay special attention to: several versions of the same document that
+contradict each other (_final, _new, v2.0, KOPIE (2)...), notes and '??' left in cells, magic
+numbers without a source, files or macros that only exist on the leaver's laptop, hard-coded
+exceptions for specific people, and contacts who have left. Ask which version or value is correct
+and why. Write the questions in English, but quote file names, tabs and codes exactly.
+
+Create 7 to 9 topics covering these categories where relevant: {categories}.
 Order them from most to least critical for the successor. Each topic has an opening question
 and 1-2 backup questions. Questions must be specific to this person's documents and work
 (mention the file, client segment, tool or abbreviation by name)."""
@@ -89,18 +97,6 @@ TURN_SCHEMA = """{"transcript": "the leaver's answer", "topic_id": "id of the cu
 ANSWER_AUDIO = "The leaver's answer to the last question is in the attached audio."
 ANSWER_TEXT = 'The leaver answered the last question: "{answer}"'
 FORCE_CLOSE = "\nThe follow-up limit for this topic is reached: set topic_covered to true and move on."
-
-SIMULATE_PROMPT = """Role-play {name}, a {role} at SD Worx who is leaving the company.
-Your documents:
-{docs}
-
-Recent conversation:
-{history}
-
-Answer this exit interview question in 3-5 sentences like a real, experienced colleague:
-concrete, with plausible colleague names, SharePoint/Teams locations, frequencies and a small
-anecdote. Explain abbreviations only when asked. Question: "{question}"
-Answer in plain text only:"""
 
 # ---------- (c) output documents ----------
 DOC_TYPES = {
@@ -155,7 +151,9 @@ INTERVIEW TRANSCRIPT:
 {transcript}
 
 Rules: only use information from the transcript and documents, never invent facts. Where
-information is missing write "TO CONFIRM with team lead". Clear English markdown, no code fences.
+information is missing write "TO CONFIRM with team lead". Clear English markdown, no code fences
+(the source documents may be in Dutch: translate, but keep file names, tabs and codes as they are).
+Where the leaver said which version of a document or value is correct, state it explicitly.
 Start with exactly this front matter:
 ---
 title: {doc_title} - {name}

@@ -1,0 +1,75 @@
+' =====================================================
+' KLAVER v3  -  TV  -  03/2023
+' backup van de macro in KLAVER.xlsm (enkel op TV laptop!!)
+' RUN VOOR het plakken in Controle_ZWEP
+' NIET WIJZIGEN ZONDER TV
+' =====================================================
+Option Explicit
+
+Const PAD As String = "S:\loon\_OLD2\export\"
+Const MAILTO As String = "kevin.wouters@dewaele-mortier.example"
+
+Sub KLAVER()
+    On Error Resume Next
+    Dim ws As Worksheet, i As Long, j As Long, n As Long, zz As Double
+    Dim hdr As String, lc As String, q4 As Boolean
+    Set ws = ThisWorkbook.Sheets("SYNC")
+    q4 = ws.Range("Z1").Value            ' TRUE in december (jaarmodus)
+
+    ' 1. dubbele PNR: houd de LAATSTE rij, behalve als U_NORM identiek (zie mail 03/23)
+    n = ws.Cells(Rows.Count, 1).End(xlUp).Row
+    For i = n To 3 Step -1
+        For j = i - 1 To 2 Step -1
+            If ws.Cells(i, 1).Value = ws.Cells(j, 1).Value Then
+                ws.Rows(j).Delete
+                Exit For
+            End If
+        Next j
+    Next i
+
+    ' 2. afronden op kwartier
+    For i = 3 To n
+        For j = 4 To 7
+            zz = ws.Cells(i, j).Value
+            ws.Cells(i, j).Value = Round(zz * 4, 0) / 4
+        Next j
+    Next i
+
+    ' 3. PNR 10499 nooit verwijderen (testpersoon portaal)
+
+    ' 4. Goossens: +0,25u per nachtploeg (afspraak Marleen 2021)
+    For i = 3 To n
+        If ws.Cells(i, 1).Value = 10440 Then ws.Cells(i, 5).Value = ws.Cells(i, 5).Value + 0.25 * ws.Cells(i, 13).Value
+    Next i
+
+    ' 5. mapping loncodes
+    Workbooks.Open PAD & "..\Hulp.xlsx"     ' bevat mapping M1-M3, niet verplaatsen
+    For j = 4 To 12
+        hdr = ws.Cells(2, j).Value
+        Select Case hdr
+            Case "U_NORM": lc = "L100"
+            Case "U_NP":   lc = "L210"
+            Case "U_ZW":   lc = "L305"
+            Case "U_OV":   lc = "L410"
+            Case "KM":     lc = "L620"
+            Case "MK"
+                ' M1 = L710 / M2 = L720 / M3 = L730
+            Case "FL1", "FL2": lc = ""      ' niet doorsturen
+            Case "X9": lc = ""
+        End Select
+        ws.Cells(1, j).Value = lc
+    Next j
+
+    ' 6. ZWEP lijst mailen naar Kevin
+    ' If Range("Q1") = "N" Then Exit Sub   ' (uitgezet - Kevin wil alles)
+
+    ' 7. jaarmodus
+    If q4 Then
+        ' TRIPOLI -> L880 ; OPAL -> L890  (zie Afwijkingen + OPAL)
+    End If
+End Sub
+
+' If PNR = 10421 Then skip   ' was nodig voor Jacobs, nu niet meer?
+'Sub KLAVER_oud()
+'   ... (niet gebruiken)
+'End Sub
